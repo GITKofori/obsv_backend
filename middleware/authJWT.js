@@ -68,4 +68,12 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticateToken };
+// SSE variant: EventSource cannot set custom headers, so also accept ?token=
+const authenticateSSE = async (req, res, next) => {
+  if (req.query.token && !req.headers["authorization"]) {
+    req.headers["authorization"] = `Bearer ${req.query.token}`;
+  }
+  return authenticateToken(req, res, next);
+};
+
+module.exports = { authenticateToken, authenticateSSE };

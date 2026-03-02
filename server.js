@@ -1,26 +1,44 @@
 const express = require("express");
 const cors = require("cors");
 
-const telemetryRoutes = require("./routes/telemetry.routes");
-const { authenticateToken } = require("./middleware/authJWT");
+require("dotenv").config();
 
 const app = express();
-
-require("dotenv").config();
 
 app.use(express.json());
 app.use(cors());
 
-app.use("/api/protected", authenticateToken, telemetryRoutes);
+const { authenticateToken, authenticateSSE } = require("./middleware/authJWT");
 
+const telemetryRoutes = require("./routes/telemetry.routes");
 const pmacRoutes = require("./routes/pmac.routes");
 const validacaoRoutes = require("./routes/validacao.routes");
 const sensoresRoutes = require("./routes/sensores.routes");
 const dashboardPmacRoutes = require("./routes/dashboard-pmac.routes");
+const alertasRegrasRoutes = require("./routes/alertas-regras.routes");
 
+// SSE stream uses query-param token auth (EventSource can't set headers)
+app.get(
+  "/api/protected/sensores/stream",
+  authenticateSSE,
+  require("./controllers/sensores.controller").streamSSE
+);
+
+app.use("/api/protected", authenticateToken, telemetryRoutes);
 app.use("/api/protected/pmac", authenticateToken, pmacRoutes);
 app.use("/api/protected/validacao", authenticateToken, validacaoRoutes);
 app.use("/api/protected/sensores", authenticateToken, sensoresRoutes);
 app.use("/api/protected/dashboard-pmac", authenticateToken, dashboardPmacRoutes);
+app.use("/api/protected/alertas", authenticateToken, alertasRegrasRoutes);
 
-app.listen(8080, () => console.log("Server running on port 8080"));
+app.listen(8080, () => {
+  console.log("Server running on port 8080");
+
+  // Start MQTT client (connects to HiveMQ broker)
+  const mqttService = require("./services/mqtt.service");
+  mqttService.init();
+
+  // Start periodic aggregated alert evaluation (every 2 min)
+  const alertService = require("./services/alert.service");
+  alertService.startPeriodicEvaluation();
+});

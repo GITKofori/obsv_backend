@@ -2,17 +2,42 @@ const pool = require("../util/db");
 
 exports.getPendentes = async (req, res) => {
   try {
-    const execucoesPendentes = await pool.query(
-      "SELECT * FROM execucao WHERE estado = 'Pendente' ORDER BY data_registo DESC"
-    );
+    const execucoesPendentes = await pool.query(`
+      SELECT
+        e.*,
+        i.nome              AS indicador_nome,
+        i.tipo_meta,
+        i.meta_alvo,
+        i.is_validada,
+        m.id                AS medida_id,
+        m.designacao        AS medida_designacao,
+        m.setor,
+        mun.nome            AS municipio_nome
+      FROM execucao e
+      JOIN indicadores i   ON i.id = e.fk_indicador
+      JOIN medidas m        ON m.id = i.fk_medida
+      JOIN municipios mun   ON mun.id = m.fk_municipio
+      WHERE e.estado_validacao = 'Pendente'
+      ORDER BY e.data_insercao DESC
+    `);
 
-    const indicadoresNaoValidados = await pool.query(
-      "SELECT * FROM indicadores WHERE is_validada = FALSE AND meta_alvo IS NOT NULL ORDER BY id ASC"
-    );
+    const metasPendentes = await pool.query(`
+      SELECT
+        i.*,
+        m.id          AS medida_id,
+        m.designacao  AS medida_designacao,
+        mun.nome      AS municipio_nome
+      FROM indicadores i
+      JOIN medidas m      ON m.id = i.fk_medida
+      JOIN municipios mun ON mun.id = m.fk_municipio
+      WHERE i.is_validada = FALSE
+        AND i.meta_alvo IS NOT NULL
+      ORDER BY i.id ASC
+    `);
 
     res.json({
-      execucoes: execucoesPendentes.rows,
-      indicadores: indicadoresNaoValidados.rows,
+      execucoes_pendentes: execucoesPendentes.rows,
+      metas_pendentes: metasPendentes.rows,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -26,7 +51,7 @@ exports.aprovar = async (req, res) => {
 
     if (tipo === "execucao") {
       const result = await pool.query(
-        "UPDATE execucao SET estado = 'Aprovado' WHERE id = $1 RETURNING *",
+        "UPDATE execucao SET estado_validacao = 'Aprovado' WHERE id = $1 RETURNING *",
         [id]
       );
       if (result.rows.length === 0) {
@@ -59,7 +84,7 @@ exports.rejeitar = async (req, res) => {
 
     if (tipo === "execucao") {
       const result = await pool.query(
-        "UPDATE execucao SET estado = 'Rejeitado' WHERE id = $1 RETURNING *",
+        "UPDATE execucao SET estado_validacao = 'Rejeitado' WHERE id = $1 RETURNING *",
         [id]
       );
       if (result.rows.length === 0) {

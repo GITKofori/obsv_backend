@@ -17,6 +17,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.2",
+    "mqtt": "^5.15.0",
     "pg": "^8.13.3"
   },
   "devDependencies": {
