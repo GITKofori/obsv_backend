@@ -17,10 +17,11 @@ async function getMunicipioNames(municipioId) {
 function aggregateByVector(rows) {
   let electricity_mwh = 0, gas_mwh = 0, oil_mwh = 0;
   for (const row of rows) {
-    const mwh = rawToMwh(Number(row.type), row.sub_type_descr, row.total);
-    if (row.type === 1) electricity_mwh += mwh;
-    else if (row.type === 2) gas_mwh += mwh;
-    else if (row.type === 3) oil_mwh += mwh;
+    const type = Number(row.type);
+    const mwh = rawToMwh(type, row.sub_type_descr, row.total);
+    if (type === 1) electricity_mwh += mwh;
+    else if (type === 2) gas_mwh += mwh;
+    else if (type === 3) oil_mwh += mwh;
   }
   return {
     electricity_mwh: Math.round(electricity_mwh),
@@ -46,11 +47,12 @@ function buildEnergyByYear(rows) {
   const yearMap = {};
   for (const row of rows) {
     const y = row.year;
+    const type = Number(row.type);
     if (!yearMap[y]) yearMap[y] = { year: y, electricity_mwh: null, gas_mwh: null, oil_mwh: null };
-    const mwh = rawToMwh(Number(row.type), row.sub_type_descr, row.total);
-    if (row.type === 1) yearMap[y].electricity_mwh = Math.round((yearMap[y].electricity_mwh || 0) + mwh);
-    else if (row.type === 2) yearMap[y].gas_mwh = Math.round((yearMap[y].gas_mwh || 0) + mwh);
-    else if (row.type === 3) yearMap[y].oil_mwh = Math.round((yearMap[y].oil_mwh || 0) + mwh);
+    const mwh = rawToMwh(type, row.sub_type_descr, row.total);
+    if (type === 1) yearMap[y].electricity_mwh = Math.round((yearMap[y].electricity_mwh || 0) + mwh);
+    else if (type === 2) yearMap[y].gas_mwh = Math.round((yearMap[y].gas_mwh || 0) + mwh);
+    else if (type === 3) yearMap[y].oil_mwh = Math.round((yearMap[y].oil_mwh || 0) + mwh);
   }
   return Object.values(yearMap).sort((a, b) => a.year - b.year);
 }
@@ -79,6 +81,18 @@ async function summary(req, res) {
     const yearToUse = req.query.year
       ? parseInt(req.query.year, 10)
       : (latestYears.find(r => r.type === 1)?.max_year || Math.max(...latestYears.map(r => r.max_year), 0) || null);
+
+    if (yearToUse === null) {
+      return res.json({
+        latestYear: null,
+        baseline2005_tco2: REGION_BASELINE_2005,
+        energyByVector: { electricity_mwh: 0, gas_mwh: 0, oil_mwh: 0, total_mwh: 0 },
+        geeByVector: { electricity_tco2: 0, gas_tco2: 0, oil_tco2: 0, total_tco2: 0 },
+        energyByYear: [],
+        energyBySector: [],
+        lastSync: null,
+      });
+    }
 
     const [vectorRows, yearRows, sectorRows, syncRow] = await Promise.all([
       pool.query(
