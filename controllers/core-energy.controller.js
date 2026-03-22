@@ -73,6 +73,13 @@ async function summary(req, res) {
     const municipioId = req.query.municipio ? parseInt(req.query.municipio, 10) : null;
     const municipioNames = await getMunicipioNames(municipioId);
 
+    // Fetch population for per-capita calculations
+    const popRes = await pool.query(
+      'SELECT SUM(populacao_base_2005) AS total_pop FROM municipios WHERE nome = ANY($1)',
+      [municipioNames]
+    );
+    const population = Number(popRes.rows[0]?.total_pop) || null;
+
     // Find latest year with data per type
     const { rows: latestYears } = await pool.query(
       'SELECT type, MAX(year) AS max_year FROM metrics_municipio WHERE municipio = ANY($1) GROUP BY type',
@@ -86,6 +93,9 @@ async function summary(req, res) {
       return res.json({
         latestYear: null,
         baseline2005_tco2: REGION_BASELINE_2005,
+        population,
+        gee_per_capita: null,
+        energy_per_capita: null,
         energyByVector: { electricity_mwh: 0, gas_mwh: 0, oil_mwh: 0, total_mwh: 0 },
         geeByVector: { electricity_tco2: 0, gas_tco2: 0, oil_tco2: 0, total_tco2: 0 },
         energyByYear: [],
@@ -132,9 +142,20 @@ async function summary(req, res) {
     const energyByYear = buildEnergyByYear(yearRows.rows);
     const energyBySector = buildEnergyBySector(sectorRows.rows);
 
+    const gee_per_capita = population && geeByVector.total_tco2 > 0
+      ? Math.round((geeByVector.total_tco2 / population) * 100) / 100
+      : null;
+
+    const energy_per_capita = population && energyByVector.total_mwh > 0
+      ? Math.round((energyByVector.total_mwh / population) * 100) / 100
+      : null;
+
     res.json({
       latestYear: yearToUse,
       baseline2005_tco2: REGION_BASELINE_2005,
+      population,
+      gee_per_capita,
+      energy_per_capita,
       energyByVector,
       geeByVector,
       energyByYear,
