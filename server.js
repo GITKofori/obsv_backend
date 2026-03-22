@@ -19,6 +19,7 @@ const alertasRegrasRoutes = require("./routes/alertas-regras.routes");
 const scraperRoutes = require("./routes/scraper.routes");
 const dgegScraperRoutes = require('./routes/dgeg-scraper.routes');
 const coreEnergyRoutes = require('./routes/core-energy.routes');
+const gestaoValidationRoutes = require('./routes/gestao-validation.routes');
 
 // SSE stream uses query-param token auth (EventSource can't set headers)
 app.get(
@@ -36,6 +37,7 @@ app.use("/api/protected/alertas", authenticateToken, alertasRegrasRoutes);
 app.use("/api/protected/admin/scrapers", authenticateToken, scraperRoutes);
 app.use("/api/protected/admin/scrapers/dgeg-energy", authenticateToken, dgegScraperRoutes);
 app.use('/api/protected/core', authenticateToken, coreEnergyRoutes);
+app.use('/api/protected/gestao', authenticateToken, gestaoValidationRoutes);
 
 app.listen(8080, () => {
   console.log("Server running on port 8080");
