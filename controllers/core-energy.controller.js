@@ -147,4 +147,60 @@ async function summary(req, res) {
   }
 }
 
-module.exports = { summary };
+async function map(req, res) {
+  try {
+    const year = req.query.year ? parseInt(req.query.year, 10) : 2023;
+    const municipioNames = ALTO_TAMEGA_MUNICIPIOS;
+
+    const [energyRows, medidasRows] = await Promise.all([
+      pool.query(
+        `SELECT mm.municipio, mm.type, mm.sub_type, st.descr AS sub_type_descr,
+                SUM(mm.value::numeric) AS total
+         FROM metrics_municipio mm JOIN sub_types st ON st.id = mm.sub_type
+         WHERE mm.municipio = ANY($1) AND mm.year = $2
+           AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
+           AND NOT (mm.type = 1 AND mm.sub_type != 4)
+         GROUP BY mm.municipio, mm.type, mm.sub_type, st.descr`,
+        [municipioNames, year]
+      ),
+      pool.query(
+        `SELECT mu.nome, COUNT(m.id) AS medidas_count
+         FROM municipios mu LEFT JOIN medidas m ON m.fk_municipio = mu.id
+         WHERE mu.nome = ANY($1)
+         GROUP BY mu.nome`,
+        [municipioNames]
+      ),
+    ]);
+
+    // Build per-municipality aggregates
+    const munMap = {};
+    for (const mun of municipioNames) {
+      munMap[mun] = { municipio: mun, energia_mwh: 0, gee_tco2: 0, medidas_count: 0 };
+    }
+
+    for (const row of energyRows.rows) {
+      const type = Number(row.type);
+      const mwh = rawToMwh(type, row.sub_type_descr, row.total);
+      const tco2 = mwhToTco2(type, mwh);
+      if (munMap[row.municipio]) {
+        munMap[row.municipio].energia_mwh += mwh;
+        munMap[row.municipio].gee_tco2 += tco2;
+      }
+    }
+    for (const row of medidasRows.rows) {
+      if (munMap[row.nome]) munMap[row.nome].medidas_count = Number(row.medidas_count);
+    }
+
+    // Round
+    for (const mun of Object.values(munMap)) {
+      mun.energia_mwh = Math.round(mun.energia_mwh);
+      mun.gee_tco2 = Math.round(mun.gee_tco2);
+    }
+
+    res.json(Object.values(munMap));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { summary, map };
