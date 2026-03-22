@@ -22,6 +22,12 @@ async function getPending(req, res) {
       conditions.push(`m.setor = $${params.length}`);
     }
 
+    // Tecnico can only see pending items from their municipality
+    if (req.appRole === 'tecnico_municipal') {
+      params.push(req.appMunicipio);
+      conditions.push(`m.fk_municipio = $${params.length}`);
+    }
+
     const { rows } = await pool.query(
       `SELECT e.id, e.fk_indicador, e.ano_referencia,
               e.valor_executado, e.url_evidencia, e.observacoes, e.data_insercao, e.estado_validacao,
@@ -78,6 +84,19 @@ async function validateRecord(req, res) {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
+    // Scope check for tecnico
+    if (req.appRole === 'tecnico_municipal') {
+      const check = await pool.query(
+        `SELECT m.fk_municipio FROM execucao e
+         JOIN indicadores i ON i.id = e.fk_indicador
+         JOIN medidas m ON m.id = i.fk_medida
+         WHERE e.id = $1`, [id]
+      );
+      if (!check.rows.length || check.rows[0].fk_municipio !== req.appMunicipio) {
+        return res.status(403).json({ error: 'Access denied: not your municipality' });
+      }
+    }
+
     const { rows } = await pool.query(
       `UPDATE execucao SET estado_validacao = 'Aprovado'
        WHERE id = $1 AND estado_validacao = 'Submetido'
@@ -107,6 +126,19 @@ async function reject(req, res) {
   const { note } = req.body;
   if (!note?.trim()) return res.status(400).json({ error: 'Rejection note is required' });
   try {
+    // Scope check for tecnico
+    if (req.appRole === 'tecnico_municipal') {
+      const check = await pool.query(
+        `SELECT m.fk_municipio FROM execucao e
+         JOIN indicadores i ON i.id = e.fk_indicador
+         JOIN medidas m ON m.id = i.fk_medida
+         WHERE e.id = $1`, [id]
+      );
+      if (!check.rows.length || check.rows[0].fk_municipio !== req.appMunicipio) {
+        return res.status(403).json({ error: 'Access denied: not your municipality' });
+      }
+    }
+
     const { rows } = await pool.query(
       `UPDATE execucao SET estado_validacao = 'Rejeitado', nota_rejeicao = $2
        WHERE id = $1 AND estado_validacao = 'Submetido'
@@ -129,10 +161,22 @@ async function reject(req, res) {
 /**
  * GET /pending-count
  * Returns the count of submitted records (for sidebar badge).
+ * Scoped to municipality for tecnico_municipal.
  */
 async function getPendingCount(req, res) {
   try {
-    const { rows } = await pool.query("SELECT COUNT(*) AS cnt FROM execucao WHERE estado_validacao = 'Submetido'");
+    let query = "SELECT COUNT(*) AS cnt FROM execucao e WHERE e.estado_validacao = 'Submetido'";
+    const params = [];
+
+    if (req.appRole === 'tecnico_municipal') {
+      query = `SELECT COUNT(*) AS cnt FROM execucao e
+               JOIN indicadores i ON i.id = e.fk_indicador
+               JOIN medidas m ON m.id = i.fk_medida
+               WHERE e.estado_validacao = 'Submetido' AND m.fk_municipio = $1`;
+      params.push(req.appMunicipio);
+    }
+
+    const { rows } = await pool.query(query, params);
     res.json({ count: Number(rows[0].cnt) });
   } catch (err) {
     res.status(500).json({ error: err.message });
