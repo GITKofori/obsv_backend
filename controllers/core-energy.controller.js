@@ -80,9 +80,9 @@ async function summary(req, res) {
     );
     const population = Number(popRes.rows[0]?.total_pop) || null;
 
-    // Find latest year with data per type
+    // Find latest year with data per type (only consider 2005+)
     const { rows: latestYears } = await pool.query(
-      'SELECT type, MAX(year) AS max_year FROM metrics_municipio WHERE municipio = ANY($1) GROUP BY type',
+      'SELECT type, MAX(year) AS max_year FROM metrics_municipio WHERE municipio = ANY($1) AND year >= 2005 GROUP BY type',
       [municipioNames]
     );
     const yearToUse = req.query.year
@@ -104,6 +104,8 @@ async function summary(req, res) {
       });
     }
 
+    const MIN_YEAR = 2005;
+
     const [vectorRows, yearRows, sectorRows, syncRow] = await Promise.all([
       pool.query(
         `SELECT mm.type, mm.sub_type, st.descr AS sub_type_descr, SUM(mm.value::numeric) AS total
@@ -118,10 +120,11 @@ async function summary(req, res) {
         `SELECT mm.year, mm.type, mm.sub_type, st.descr AS sub_type_descr, SUM(mm.value::numeric) AS total
          FROM metrics_municipio mm JOIN sub_types st ON st.id = mm.sub_type
          WHERE mm.municipio = ANY($1)
+           AND mm.year >= $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
            AND NOT (mm.type = 1 AND mm.sub_type != 4)
          GROUP BY mm.year, mm.type, mm.sub_type, st.descr ORDER BY mm.year ASC`,
-        [municipioNames]
+        [municipioNames, MIN_YEAR]
       ),
       pool.query(
         `SELECT ct.descr AS sector, mm.type, mm.sub_type, st.descr AS sub_type_descr, SUM(mm.value::numeric) AS total
