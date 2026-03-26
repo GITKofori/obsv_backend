@@ -161,8 +161,11 @@ async function inviteUser(req, res) {
       return res.status(409).json({ error: 'A user with this email already exists' });
     }
 
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectTo = `${frontendUrl}/auth/callback?next=/accept-invite`;
     const { data: supabaseUser, error: supabaseError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: { nome: nome || '' }
+      data: { nome: nome || '' },
+      redirectTo
     });
     if (supabaseError) {
       return res.status(500).json({ error: `Supabase error: ${supabaseError.message}` });
@@ -317,9 +320,10 @@ async function resendInvite(req, res) {
       return res.status(400).json({ error: 'User has already accepted the invite' });
     }
 
-    const { error } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'invite',
-      email: current[0].email
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectTo = `${frontendUrl}/auth/callback?next=/accept-invite`;
+    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(current[0].email, {
+      redirectTo
     });
     if (error) return res.status(500).json({ error: `Supabase error: ${error.message}` });
 
