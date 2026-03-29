@@ -1,6 +1,8 @@
 const pool = require("../util/db");
 const mqttService = require("../services/mqtt.service");
 
+const IOT_MIN_DATE = '2026-03-16T00:00:00Z';
+
 // ─── SSE stream ───────────────────────────────────────────────────────────────
 // Accepts JWT via query param (?token=...) because EventSource doesn't support
 // custom request headers.
@@ -34,6 +36,8 @@ exports.getHistorico = async (req, res) => {
     const table = topico === "t1" ? "leituras_t1" : "leituras_t2";
     const params = [];
     let where = "WHERE 1=1";
+    params.push(IOT_MIN_DATE);
+    where += ` AND timestamp >= $${params.length}`;
 
     if (parcela) {
       params.push(parcela);
@@ -94,10 +98,11 @@ exports.getStats = async (req, res) => {
        FROM ${table}
        WHERE parcela = $2
          AND timestamp >= NOW() - $3::interval
+         AND timestamp >= $5::timestamp
          AND dados ? $4
        GROUP BY 1
        ORDER BY 1 ASC`,
-      [trunc, parcela, interval, campo]
+      [trunc, parcela, interval, campo, IOT_MIN_DATE]
     );
 
     res.json(rows);
