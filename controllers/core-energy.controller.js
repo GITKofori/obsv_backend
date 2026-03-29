@@ -31,10 +31,10 @@ function aggregateByVector(rows) {
   };
 }
 
-function aggregateGee(energyByVector) {
-  const electricity_tco2 = Math.round(mwhToTco2(1, energyByVector.electricity_mwh));
-  const gas_tco2 = Math.round(mwhToTco2(2, energyByVector.gas_mwh));
-  const oil_tco2 = Math.round(mwhToTco2(3, energyByVector.oil_mwh));
+function aggregateGee(energyByVector, year) {
+  const electricity_tco2 = Math.round(mwhToTco2(1, energyByVector.electricity_mwh, year));
+  const gas_tco2 = Math.round(mwhToTco2(2, energyByVector.gas_mwh, year));
+  const oil_tco2 = Math.round(mwhToTco2(3, energyByVector.oil_mwh, year));
   return {
     electricity_tco2,
     gas_tco2,
@@ -141,7 +141,7 @@ async function summary(req, res) {
     ]);
 
     const energyByVector = aggregateByVector(vectorRows.rows);
-    const geeByVector = aggregateGee(energyByVector);
+    const geeByVector = aggregateGee(energyByVector, yearToUse);
     const energyByYear = buildEnergyByYear(yearRows.rows);
     const energyBySector = buildEnergyBySector(sectorRows.rows);
 
@@ -205,7 +205,7 @@ async function map(req, res) {
     for (const row of energyRows.rows) {
       const type = Number(row.type);
       const mwh = rawToMwh(type, row.sub_type_descr, row.total);
-      const tco2 = mwhToTco2(type, mwh);
+      const tco2 = mwhToTco2(type, mwh, year);
       if (munMap[row.municipio]) {
         munMap[row.municipio].energia_mwh += mwh;
         munMap[row.municipio].gee_tco2 += tco2;
