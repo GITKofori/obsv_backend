@@ -74,6 +74,21 @@ function getElectricityEF(year) {
 
 const REGION_BASELINE_2005 = 280000; // tCO2e, Alto Tâmega e Barroso PMAC
 
+// PMAC reduction milestones vs 2005 baseline
+const PMAC_MILESTONES = [
+  { year: 2005, factor: 1.0 },
+  { year: 2030, factor: 0.45 },    // -55%
+  { year: 2040, factor: 0.35 },    // -65% (conservative)
+  { year: 2050, factor: 0.10 },    // -90%
+];
+
+const PMAC_MILESTONES_AMBITIOUS = [
+  { year: 2005, factor: 1.0 },
+  { year: 2030, factor: 0.45 },    // -55%
+  { year: 2040, factor: 0.25 },    // -75% (ambitious)
+  { year: 2050, factor: 0.10 },    // -90%
+];
+
 const ALTO_TAMEGA_MUNICIPIOS = [
   'Boticas', 'Chaves', 'Montalegre',
   'Ribeira de Pena', 'Valpaços', 'Vila Pouca de Aguiar',
@@ -125,8 +140,64 @@ function mwhToTco2(type, mwh, year, subTypeDescr) {
   return 0;
 }
 
+// Maps consumer_type IDs (from consumer_types table) to 7 PMAC sectors.
+// Based on client specification mapping CAE codes → sectors.
+const CONSUMER_TYPE_TO_SECTOR = {
+  // Agricultura e Usos Solo: CAE 01, 02, 03
+  1: 'Agricultura e Usos Solo',
+  2: 'Agricultura e Usos Solo',
+  3: 'Agricultura e Usos Solo',
+
+  // Indústria: CAE 07-33 (except 35), 36
+  7: 'Indústria',
+  8: 'Indústria',
+  9: 'Indústria',
+  10: 'Indústria',
+  11: 'Indústria',
+  13: 'Indústria',
+  14: 'Indústria',
+  15: 'Indústria',
+  16: 'Indústria',
+  18: 'Indústria',
+  19: 'Indústria',
+  20: 'Indústria',
+  22: 'Indústria',
+  23: 'Indústria',
+  24: 'Indústria',
+  25: 'Indústria',
+  26: 'Indústria',
+  28: 'Indústria',
+  30: 'Indústria',
+  31: 'Indústria',
+  32: 'Indústria',
+  33: 'Indústria',
+  36: 'Indústria',
+
+  // Energia: CAE 35
+  35: 'Energia',
+
+  // Resíduos e Águas residuais: CAE 37, 38
+  37: 'Resíduos e Águas residuais',
+  38: 'Resíduos e Águas residuais',
+
+  // Transportes: CAE 49
+  49: 'Transportes',
+
+  // Edifícios (Residencial): CAE 98
+  98: 'Edifícios (Residencial)',
+
+  // Edifícios (Serviços): all remaining CAEs (default)
+};
+
+const DEFAULT_SECTOR = 'Edifícios (Serviços)';
+
+function getConsumerSector(consumerTypeId) {
+  return CONSUMER_TYPE_TO_SECTOR[consumerTypeId] || DEFAULT_SECTOR;
+}
+
 module.exports = {
   OIL_MWH_PER_TON, EMISSION_FACTORS_MWH, ELECTRICITY_EF_BY_YEAR, OIL_EMISSION_FACTORS_MWH,
-  REGION_BASELINE_2005, ALTO_TAMEGA_MUNICIPIOS,
-  rawToMwh, mwhToTco2, getElectricityEF,
+  REGION_BASELINE_2005, PMAC_MILESTONES, PMAC_MILESTONES_AMBITIOUS, ALTO_TAMEGA_MUNICIPIOS,
+  CONSUMER_TYPE_TO_SECTOR, DEFAULT_SECTOR,
+  rawToMwh, mwhToTco2, getElectricityEF, getConsumerSector,
 };

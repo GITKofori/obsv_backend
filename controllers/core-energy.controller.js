@@ -4,7 +4,7 @@
 const pool = require('../util/db');
 const {
   REGION_BASELINE_2005, ALTO_TAMEGA_MUNICIPIOS,
-  rawToMwh, mwhToTco2,
+  rawToMwh, mwhToTco2, getConsumerSector,
 } = require('../utils/emission-factors');
 
 async function getMunicipioNames(municipioId) {
@@ -61,11 +61,49 @@ function buildEnergyBySector(rows) {
   const sectorMap = {};
   for (const row of rows) {
     const mwh = rawToMwh(Number(row.type), row.sub_type_descr, row.total);
-    sectorMap[row.sector] = (sectorMap[row.sector] || 0) + mwh;
+    const sector = getConsumerSector(Number(row.consumer_type_id));
+    sectorMap[sector] = (sectorMap[sector] || 0) + mwh;
   }
   return Object.entries(sectorMap)
     .map(([sector, mwh]) => ({ sector, mwh: Math.round(mwh) }))
     .sort((a, b) => b.mwh - a.mwh);
+}
+
+function buildGeeEmissionsBySector(rows, year) {
+  const sectorMap = {};
+  for (const row of rows) {
+    const type = Number(row.type);
+    const mwh = rawToMwh(type, row.sub_type_descr, row.total);
+    const tco2 = mwhToTco2(type, mwh, year, row.sub_type_descr);
+    const sector = getConsumerSector(Number(row.consumer_type_id));
+    sectorMap[sector] = (sectorMap[sector] || 0) + tco2;
+  }
+  return Object.entries(sectorMap)
+    .map(([sector, tco2]) => ({ sector, tco2: Math.round(tco2) }))
+    .sort((a, b) => b.tco2 - a.tco2);
+}
+
+function buildGeeByYear(rows) {
+  const yearMap = {};
+  for (const row of rows) {
+    const y = row.year;
+    const type = Number(row.type);
+    if (!yearMap[y]) yearMap[y] = { year: y, electricity_tco2: 0, gas_tco2: 0, oil_tco2: 0 };
+    const mwh = rawToMwh(type, row.sub_type_descr, row.total);
+    const tco2 = mwhToTco2(type, mwh, y, row.sub_type_descr);
+    if (type === 1) yearMap[y].electricity_tco2 += tco2;
+    else if (type === 2) yearMap[y].gas_tco2 += tco2;
+    else if (type === 3) yearMap[y].oil_tco2 += tco2;
+  }
+  return Object.values(yearMap)
+    .map(y => ({
+      year: y.year,
+      electricity_tco2: Math.round(y.electricity_tco2),
+      gas_tco2: Math.round(y.gas_tco2),
+      oil_tco2: Math.round(y.oil_tco2),
+      total_tco2: Math.round(y.electricity_tco2 + y.gas_tco2 + y.oil_tco2),
+    }))
+    .sort((a, b) => a.year - b.year);
 }
 
 async function summary(req, res) {
@@ -73,12 +111,13 @@ async function summary(req, res) {
     const municipioId = req.query.municipio ? parseInt(req.query.municipio, 10) : null;
     const municipioNames = await getMunicipioNames(municipioId);
 
-    // Fetch population for per-capita calculations
+    // Fetch population and per-municipality baseline for per-capita and trajectory calculations
     const popRes = await pool.query(
-      'SELECT SUM(populacao_base_2005) AS total_pop FROM municipios WHERE nome = ANY($1)',
+      'SELECT SUM(populacao_base_2005) AS total_pop, SUM(emissoes_base_2005) AS baseline FROM municipios WHERE nome = ANY($1)',
       [municipioNames]
     );
     const population = Number(popRes.rows[0]?.total_pop) || null;
+    const municipioBaseline2005 = Number(popRes.rows[0]?.baseline) || null;
 
     // Find latest year with data per type (only consider 2005+)
     const { rows: latestYears } = await pool.query(
@@ -93,13 +132,16 @@ async function summary(req, res) {
       return res.json({
         latestYear: null,
         baseline2005_tco2: REGION_BASELINE_2005,
+        municipio_baseline_2005: municipioBaseline2005,
         population,
         gee_per_capita: null,
         energy_per_capita: null,
         energyByVector: { electricity_mwh: 0, gas_mwh: 0, oil_mwh: 0, total_mwh: 0 },
         geeByVector: { electricity_tco2: 0, gas_tco2: 0, oil_tco2: 0, total_tco2: 0 },
         energyByYear: [],
+        geeByYear: [],
         energyBySector: [],
+        geeBySector: [],
         lastSync: null,
       });
     }
@@ -127,14 +169,15 @@ async function summary(req, res) {
         [municipioNames, MIN_YEAR]
       ),
       pool.query(
-        `SELECT ct.descr AS sector, mm.type, mm.sub_type, st.descr AS sub_type_descr, SUM(mm.value::numeric) AS total
+        `SELECT mm.consumer_type AS consumer_type_id, ct.descr AS sector,
+                mm.type, mm.sub_type, st.descr AS sub_type_descr, SUM(mm.value::numeric) AS total
          FROM metrics_municipio mm
          JOIN consumer_types ct ON ct.id = mm.consumer_type
          JOIN sub_types st ON st.id = mm.sub_type
          WHERE mm.municipio = ANY($1) AND mm.year = $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
            AND NOT (mm.type = 1 AND mm.sub_type != 4)
-         GROUP BY ct.descr, mm.type, mm.sub_type, st.descr ORDER BY total DESC`,
+         GROUP BY mm.consumer_type, ct.descr, mm.type, mm.sub_type, st.descr ORDER BY total DESC`,
         [municipioNames, yearToUse]
       ),
       pool.query('SELECT MAX(synced_at) AS last_sync FROM dgeg_sync'),
@@ -143,7 +186,9 @@ async function summary(req, res) {
     const energyByVector = aggregateByVector(vectorRows.rows);
     const geeByVector = aggregateGee(energyByVector, yearToUse);
     const energyByYear = buildEnergyByYear(yearRows.rows);
+    const geeByYear = buildGeeByYear(yearRows.rows);
     const energyBySector = buildEnergyBySector(sectorRows.rows);
+    const geeBySector = buildGeeEmissionsBySector(sectorRows.rows, yearToUse);
 
     const gee_per_capita = population && geeByVector.total_tco2 > 0
       ? Math.round((geeByVector.total_tco2 / population) * 100) / 100
@@ -156,13 +201,16 @@ async function summary(req, res) {
     res.json({
       latestYear: yearToUse,
       baseline2005_tco2: REGION_BASELINE_2005,
+      municipio_baseline_2005: municipioBaseline2005,
       population,
       gee_per_capita,
       energy_per_capita,
       energyByVector,
       geeByVector,
       energyByYear,
+      geeByYear,
       energyBySector,
+      geeBySector,
       lastSync: syncRow.rows[0]?.last_sync ?? null,
     });
   } catch (err) {
