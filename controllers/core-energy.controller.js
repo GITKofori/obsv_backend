@@ -106,6 +106,10 @@ function buildGeeByYear(rows) {
     .sort((a, b) => a.year - b.year);
 }
 
+// Electricity filter: only use sub_type=4 (Total) to avoid double-counting
+// Alta+Baixa+Autoconsumo sub_types. TC duplicate data was removed by migration 010.
+const ELEC_FILTER = `AND NOT (mm.type = 1 AND mm.sub_type != 4)`;
+
 async function summary(req, res) {
   try {
     const municipioId = req.query.municipio ? parseInt(req.query.municipio, 10) : null;
@@ -154,7 +158,7 @@ async function summary(req, res) {
          FROM metrics_municipio mm JOIN sub_types st ON st.id = mm.sub_type
          WHERE mm.municipio = ANY($1) AND mm.year = $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
-           AND NOT (mm.type = 1 AND mm.sub_type != 4)
+           ${ELEC_FILTER}
          GROUP BY mm.type, mm.sub_type, st.descr`,
         [municipioNames, yearToUse]
       ),
@@ -164,7 +168,7 @@ async function summary(req, res) {
          WHERE mm.municipio = ANY($1)
            AND mm.year >= $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
-           AND NOT (mm.type = 1 AND mm.sub_type != 4)
+           ${ELEC_FILTER}
          GROUP BY mm.year, mm.type, mm.sub_type, st.descr ORDER BY mm.year ASC`,
         [municipioNames, MIN_YEAR]
       ),
@@ -176,7 +180,7 @@ async function summary(req, res) {
          JOIN sub_types st ON st.id = mm.sub_type
          WHERE mm.municipio = ANY($1) AND mm.year = $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
-           AND NOT (mm.type = 1 AND mm.sub_type != 4)
+           ${ELEC_FILTER}
          GROUP BY mm.consumer_type, ct.descr, mm.type, mm.sub_type, st.descr ORDER BY total DESC`,
         [municipioNames, yearToUse]
       ),
@@ -231,7 +235,7 @@ async function map(req, res) {
          FROM metrics_municipio mm JOIN sub_types st ON st.id = mm.sub_type
          WHERE mm.municipio = ANY($1) AND mm.year = $2
            AND mm.value ~ '^[0-9]+\\.?[0-9]*$'
-           AND NOT (mm.type = 1 AND mm.sub_type != 4)
+           ${ELEC_FILTER}
          GROUP BY mm.municipio, mm.type, mm.sub_type, st.descr`,
         [municipioNames, year]
       ),

@@ -32,30 +32,30 @@ const OIL_MWH_PER_TON = {
 // tCO2e per MWh — Portuguese national standard factors (APA/IPCC)
 // Gas and oil combustion factors are relatively stable, so those remain fixed.
 const EMISSION_FACTORS_MWH = {
-  electricity: 0.255, // kept for reference; use getElectricityEF(year) for accurate values
+  electricity: 0.288, // kept for reference (2019 T2 value); use getElectricityEF(year) for accurate values
   gas: 0.202,
   oil: 0.267,
 };
 
 // Year-variable electricity grid emission factors (tCO2 eq./MWh)
-// Source: Client calculations spreadsheet (T1. Fator de Emissão de Eletricidade – Anual, Continente)
+// Source: Client calculations spreadsheet (T2. Fator de Emissão de Eletricidade – Média móvel de 5 anos, Continente)
 const ELECTRICITY_EF_BY_YEAR = {
-  2005: 0.527,
-  2006: 0.433,
-  2007: 0.393,
-  2008: 0.386,
-  2009: 0.366,
-  2010: 0.245,
-  2011: 0.294,
-  2012: 0.346,
-  2013: 0.262,
-  2014: 0.254,
-  2015: 0.328,
-  2016: 0.267,
-  2017: 0.338,
-  2018: 0.282,
-  2019: 0.224,
-  2020: 0.175,
+  2005: 0.481,
+  2006: 0.476,
+  2007: 0.449,
+  2008: 0.442,
+  2009: 0.421,
+  2010: 0.365,
+  2011: 0.337,
+  2012: 0.327,
+  2013: 0.302,
+  2014: 0.280,
+  2015: 0.297,
+  2016: 0.292,
+  2017: 0.290,
+  2018: 0.294,
+  2019: 0.288,
+  2020: 0.257,
 };
 
 function getElectricityEF(year) {
@@ -141,50 +141,59 @@ function mwhToTco2(type, mwh, year, subTypeDescr) {
 }
 
 // Maps consumer_type IDs (from consumer_types table) to 7 PMAC sectors.
-// Based on client specification mapping CAE codes → sectors.
+// Keys are actual DB IDs from consumer_types, NOT CAE numbers.
 const CONSUMER_TYPE_TO_SECTOR = {
   // Agricultura e Usos Solo: CAE 01, 02, 03
-  1: 'Agricultura e Usos Solo',
-  2: 'Agricultura e Usos Solo',
-  3: 'Agricultura e Usos Solo',
+  107: 'Agricultura e Usos Solo', // Agricultura, produção animal, caça
+  106: 'Agricultura e Usos Solo', // Silvicultura e exploração florestal
+  105: 'Agricultura e Usos Solo', // Pesca e aquicultura
 
   // Indústria: CAE 07-33 (except 35), 36
-  7: 'Indústria',
-  8: 'Indústria',
-  9: 'Indústria',
-  10: 'Indústria',
-  11: 'Indústria',
-  13: 'Indústria',
-  14: 'Indústria',
-  15: 'Indústria',
-  16: 'Indústria',
-  18: 'Indústria',
-  19: 'Indústria',
-  20: 'Indústria',
-  22: 'Indústria',
-  23: 'Indústria',
-  24: 'Indústria',
-  25: 'Indústria',
-  26: 'Indústria',
-  28: 'Indústria',
-  30: 'Indústria',
-  31: 'Indústria',
-  32: 'Indústria',
-  33: 'Indústria',
-  36: 'Indústria',
+  104: 'Indústria', // Extracção e preparação de minérios metálicos
+  103: 'Indústria', // Outras indústrias extractivas
+  102: 'Indústria', // Actividades dos serviços relacionados com as indústrias extractivas
+  101: 'Indústria', // Indústrias alimentares
+  100: 'Indústria', // Indústria das bebidas
+  99: 'Indústria',  // Indústria do tabaco
+  98: 'Indústria',  // Fabricação de têxteis
+  97: 'Indústria',  // Indústria do vestuário
+  96: 'Indústria',  // Indústria do couro
+  95: 'Indústria',  // Indústrias da madeira e da cortiça
+  94: 'Indústria',  // Fabricação de pasta, de papel, de cartão
+  93: 'Indústria',  // Impressão e reprodução de suportes gravados
+  92: 'Indústria',  // Fabricação de coque, produtos petrolíferos refinados
+  91: 'Indústria',  // Fabricação de produtos químicos
+  90: 'Indústria',  // Fabricação de produtos farmacêuticos
+  89: 'Indústria',  // Fabricação de artigos de borracha e matérias plásticas
+  88: 'Indústria',  // Fabrico de outros produtos minerais não metálicos
+  87: 'Indústria',  // Indústrias metalúrgicas de base
+  86: 'Indústria',  // Fabricação de produtos metálicos
+  85: 'Indústria',  // Fabricação de equipamentos informáticos
+  84: 'Indústria',  // Fabricação de equipamento eléctrico
+  83: 'Indústria',  // Fabricação de máquinas e de equipamentos
+  82: 'Indústria',  // Fabricação de veículos automóveis
+  81: 'Indústria',  // Fabricação de outro equipamento de transporte
+  80: 'Indústria',  // Fabrico de mobiliário e de colchões
+  79: 'Indústria',  // Outras indústrias transformadoras
+  78: 'Indústria',  // Reparação, manutenção e instalação de máquinas
+  76: 'Indústria',  // Captação, tratamento e distribuição de água
 
   // Energia: CAE 35
-  35: 'Energia',
+  77: 'Energia', // Electricidade, gás, vapor, água quente e fria e ar frio
 
   // Resíduos e Águas residuais: CAE 37, 38
-  37: 'Resíduos e Águas residuais',
-  38: 'Resíduos e Águas residuais',
+  75: 'Resíduos e Águas residuais', // Recolha, drenagem e tratamento de águas residuais
+  74: 'Resíduos e Águas residuais', // Recolha, tratamento e eliminação de resíduos
+  73: 'Resíduos e Águas residuais', // Descontaminação e actividades similares
 
-  // Transportes: CAE 49
-  49: 'Transportes',
+  // Transportes: CAE 49-51
+  66: 'Transportes', // Transportes terrestres e por oleodutos ou gasodutos
+  65: 'Transportes', // Transportes por água
+  110: 'Transportes', // Transportes aéreos
+  64: 'Transportes', // Armazenagem e actividades auxiliares dos transportes
 
-  // Edifícios (Residencial): CAE 98
-  98: 'Edifícios (Residencial)',
+  // Edifícios (Residencial): Consumo doméstico
+  25: 'Edifícios (Residencial)', // Consumo doméstico
 
   // Edifícios (Serviços): all remaining CAEs (default)
 };
