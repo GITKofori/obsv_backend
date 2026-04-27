@@ -115,13 +115,14 @@ async function summary(req, res) {
     const municipioId = req.query.municipio ? parseInt(req.query.municipio, 10) : null;
     const municipioNames = await getMunicipioNames(municipioId);
 
-    // Fetch population and per-municipality baseline for per-capita and trajectory calculations
-    const popRes = await pool.query(
-      'SELECT SUM(populacao_base_2005) AS total_pop, SUM(emissoes_base_2005) AS baseline FROM municipios WHERE nome = ANY($1)',
+    // Fetch per-municipality baseline (2005 census values, unchanged)
+    const baselineRes = await pool.query(
+      'SELECT SUM(emissoes_base_2005) AS baseline FROM municipios WHERE nome = ANY($1)',
       [municipioNames]
     );
-    const population = Number(popRes.rows[0]?.total_pop) || null;
-    const municipioBaseline2005 = Number(popRes.rows[0]?.baseline) || null;
+    const municipioBaseline2005 = Number(baselineRes.rows[0]?.baseline) || null;
+
+    let population = null; // resolved after yearToUse is known (see below)
 
     // Find latest year with data per type (only consider 2005+)
     const { rows: latestYears } = await pool.query(
@@ -131,6 +132,29 @@ async function summary(req, res) {
     const yearToUse = req.query.year
       ? parseInt(req.query.year, 10)
       : (latestYears.find(r => r.type === 1)?.max_year || Math.max(...latestYears.map(r => r.max_year), 0) || null);
+
+    // Fetch year-specific population for per-capita calculations.
+    // Try the exact year first; fall back to populacao_base_2005 (2021 Census) if no row exists.
+    if (yearToUse !== null) {
+      const popRes = await pool.query(
+        `SELECT SUM(mp.population) AS total_pop
+         FROM municipios m
+         JOIN municipio_population mp ON mp.municipio_id = m.id AND mp.year = $2
+         WHERE m.nome = ANY($1)`,
+        [municipioNames, yearToUse]
+      );
+      const exactPop = Number(popRes.rows[0]?.total_pop) || null;
+      if (exactPop) {
+        population = exactPop;
+      } else {
+        // Fallback: use populacao_base_2005 (2021 Census values stored on municipios)
+        const fallbackRes = await pool.query(
+          'SELECT SUM(populacao_base_2005) AS total_pop FROM municipios WHERE nome = ANY($1)',
+          [municipioNames]
+        );
+        population = Number(fallbackRes.rows[0]?.total_pop) || null;
+      }
+    }
 
     if (yearToUse === null) {
       return res.json({

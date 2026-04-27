@@ -38,24 +38,28 @@ const EMISSION_FACTORS_MWH = {
 };
 
 // Year-variable electricity grid emission factors (tCO2 eq./MWh)
-// Source: Client calculations spreadsheet (T2. Fator de Emissão de Eletricidade – Média móvel de 5 anos, Continente)
+// Source: APA "Fator de Emissão da Eletricidade 2025" (T2. Média móvel de 5 anos, Continente)
+// URL: https://apambiente.pt/sites/default/files/_Clima/Inventarios/20250808/fe_gee_eletricidade_2025_final_apc.pdf
 const ELECTRICITY_EF_BY_YEAR = {
-  2005: 0.481,
+  2005: 0.480,
   2006: 0.476,
-  2007: 0.449,
+  2007: 0.448,
   2008: 0.442,
   2009: 0.421,
   2010: 0.365,
   2011: 0.337,
-  2012: 0.327,
-  2013: 0.302,
+  2012: 0.328,
+  2013: 0.303,
   2014: 0.280,
   2015: 0.297,
   2016: 0.292,
-  2017: 0.290,
-  2018: 0.294,
-  2019: 0.288,
-  2020: 0.257,
+  2017: 0.291,
+  2018: 0.295,
+  2019: 0.289,
+  2020: 0.258,
+  2021: 0.233,
+  2022: 0.194,
+  2023: 0.156,
 };
 
 function getElectricityEF(year) {
